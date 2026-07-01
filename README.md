@@ -698,7 +698,6 @@ interface Tunnel0
 * ✅ `show crypto ikev2 sa` mostrando dos SAs `READY`.
 * ✅ `show ip ospf neighbor` mostrando los Spokes como `FULL/DROTHER`.
 * ✅ Ping Spoke-to-Spoke con `repeat 10`.
-* ✅ `show ip route` mostrando la entrada `H` (NHRP Shortcut) — prueba de Fase 3.
 
 ---
 
