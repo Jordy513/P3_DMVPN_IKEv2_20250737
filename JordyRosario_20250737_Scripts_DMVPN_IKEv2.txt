@@ -1,0 +1,240 @@
+! ══════════════════════════════════════════════════════
+! R1 — HUB | DMVPN Fase 3 con IKEv2 + OSPF
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R1
+
+! ─── Interfaces físicas ────────────────────────────────
+interface Ethernet0/0
+ description WAN-hacia-NET
+ ip address 192.168.1.10 255.255.255.0
+ no shutdown
+
+interface Ethernet0/1
+ description LAN-HUB
+ ip address 20.25.37.1 255.255.255.192
+ no shutdown
+
+! ══════════════════════════════════════════════════════
+! BLOQUE IKEv2
+! ══════════════════════════════════════════════════════
+
+! ─── PASO 1: IKEv2 Proposal ────────────────────────────
+! NOTA: no incluir "prf sha256" — no soportado en IOSv.
+crypto ikev2 proposal PROP_DMVPN
+ encryption aes-cbc-256
+ integrity sha256
+ group 14
+
+! ─── PASO 2: IKEv2 Policy ──────────────────────────────
+crypto ikev2 policy POL_DMVPN
+ proposal PROP_DMVPN
+
+! ─── PASO 3: IKEv2 Keyring — PSK wildcard para cualquier Spoke
+crypto ikev2 keyring KR_DMVPN
+ peer SPOKES_ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key local  DmvpnITLA2026!
+  pre-shared-key remote DmvpnITLA2026!
+
+! ─── PASO 4: IKEv2 Profile — acepta cualquier Spoke ────
+crypto ikev2 profile PROF_DMVPN
+ match identity remote address 0.0.0.0
+ authentication local pre-share
+ authentication remote pre-share
+ keyring local KR_DMVPN
+
+! ══════════════════════════════════════════════════════
+! BLOQUE IPSEC
+! ══════════════════════════════════════════════════════
+
+! ─── PASO 5: Transform Set en modo TRANSPORTE ─────────
+crypto ipsec transform-set TS_DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+
+! ─── PASO 6: IPSec Profile con IKEv2 ──────────────────
+crypto ipsec profile DMVPN_PROFILE
+ set transform-set TS_DMVPN
+ set ikev2-profile PROF_DMVPN
+
+! ─── PASO 7: Interfaz mGRE del Hub ─────────────────────
+interface Tunnel0
+ description DMVPN-HUB-Fase3
+ ip address 10.25.37.1 255.255.255.0
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source Ethernet0/0
+ tunnel mode gre multipoint
+ tunnel key 20250737
+ ip nhrp network-id 1
+ ip nhrp authentication dmvpnkey
+ ip nhrp map multicast dynamic
+ ip nhrp redirect              ! Fase 3 — Hub envía NHRP Redirect a los Spokes
+ ip ospf network broadcast     ! Trata la nube mGRE como red broadcast
+ ip ospf priority 2            ! Fuerza al Hub a ser siempre el OSPF DR
+ tunnel protection ipsec profile DMVPN_PROFILE
+ no shutdown
+
+! ─── PASO 8: OSPF ──────────────────────────────────────
+! Con OSPF broadcast no se necesita "no ip next-hop-self"
+! ni "no ip split-horizon" — OSPF maneja esto correctamente.
+router ospf 1
+ network 20.25.37.0 0.0.0.63 area 0
+ network 10.25.37.0 0.0.0.255 area 0
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+! ══════════════════════════════════════════════════════
+! R2 — SPOKE 1 | DMVPN Fase 3 con IKEv2 + OSPF
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R2
+
+! ─── Interfaces físicas ────────────────────────────────
+interface Ethernet0/0
+ description WAN-hacia-NET
+ ip address 192.168.1.20 255.255.255.0
+ no shutdown
+
+interface Ethernet0/1
+ description LAN-Spoke1
+ ip address 20.25.37.65 255.255.255.192
+ no shutdown
+
+! ─── PASO 1: IKEv2 Proposal ────────────────────────────
+crypto ikev2 proposal PROP_DMVPN
+ encryption aes-cbc-256
+ integrity sha256
+ group 14
+
+! ─── PASO 2: IKEv2 Policy ──────────────────────────────
+crypto ikev2 policy POL_DMVPN
+ proposal PROP_DMVPN
+
+! ─── PASO 3: IKEv2 Keyring — apunta específicamente al Hub
+crypto ikev2 keyring KR_DMVPN
+ peer HUB_R1
+  address 192.168.1.10
+  pre-shared-key local  DmvpnITLA2026!
+  pre-shared-key remote DmvpnITLA2026!
+
+! ─── PASO 4: IKEv2 Profile ─────────────────────────────
+crypto ikev2 profile PROF_DMVPN
+ match identity remote address 192.168.1.10 255.255.255.255
+ authentication local pre-share
+ authentication remote pre-share
+ keyring local KR_DMVPN
+
+! ─── PASO 5: Transform Set en modo TRANSPORTE ─────────
+crypto ipsec transform-set TS_DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+
+! ─── PASO 6: IPSec Profile con IKEv2 ──────────────────
+crypto ipsec profile DMVPN_PROFILE
+ set transform-set TS_DMVPN
+ set ikev2-profile PROF_DMVPN
+
+! ─── PASO 7: Interfaz mGRE del Spoke ───────────────────
+interface Tunnel0
+ description DMVPN-Spoke1-Fase3
+ ip address 10.25.37.2 255.255.255.0
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source Ethernet0/0
+ tunnel mode gre multipoint
+ tunnel key 20250737
+ ip nhrp network-id 1
+ ip nhrp authentication dmvpnkey
+ ip nhrp nhs 10.25.37.1
+ ip nhrp map 10.25.37.1 192.168.1.10
+ ip nhrp map multicast 192.168.1.10
+ ip nhrp shortcut              ! Fase 3 — instala rutas NHRP Shortcut (H) en la tabla
+ ip ospf network broadcast
+ ip ospf priority 0            ! Excluye al Spoke de la elección DR/BDR
+ tunnel protection ipsec profile DMVPN_PROFILE
+ no shutdown
+
+! ─── PASO 8: OSPF ──────────────────────────────────────
+router ospf 1
+ network 20.25.37.64 0.0.0.63 area 0
+ network 10.25.37.0 0.0.0.255 area 0
+
+-------------------------------------------------------------------------------------------------------------------------
+
+! ══════════════════════════════════════════════════════
+! R3 — SPOKE 2 | DMVPN Fase 3 con IKEv2 + OSPF
+! Jordy Rosario — 20250737 | Seguridad de Redes 2026-C-2
+! ══════════════════════════════════════════════════════
+
+hostname R3
+
+! ─── Interfaces físicas ────────────────────────────────
+interface Ethernet0/0
+ description WAN-hacia-NET
+ ip address 192.168.1.30 255.255.255.0
+ no shutdown
+
+interface Ethernet0/1
+ description LAN-Spoke2
+ ip address 20.25.37.129 255.255.255.192
+ no shutdown
+
+! ─── PASO 1: IKEv2 Proposal ────────────────────────────
+crypto ikev2 proposal PROP_DMVPN
+ encryption aes-cbc-256
+ integrity sha256
+ group 14
+
+! ─── PASO 2: IKEv2 Policy ──────────────────────────────
+crypto ikev2 policy POL_DMVPN
+ proposal PROP_DMVPN
+
+! ─── PASO 3: IKEv2 Keyring ─────────────────────────────
+crypto ikev2 keyring KR_DMVPN
+ peer HUB_R1
+  address 192.168.1.10
+  pre-shared-key local  DmvpnITLA2026!
+  pre-shared-key remote DmvpnITLA2026!
+
+! ─── PASO 4: IKEv2 Profile ─────────────────────────────
+crypto ikev2 profile PROF_DMVPN
+ match identity remote address 192.168.1.10 255.255.255.255
+ authentication local pre-share
+ authentication remote pre-share
+ keyring local KR_DMVPN
+
+! ─── PASO 5: Transform Set en modo TRANSPORTE ─────────
+crypto ipsec transform-set TS_DMVPN esp-aes 256 esp-sha256-hmac
+ mode transport
+
+! ─── PASO 6: IPSec Profile con IKEv2 ──────────────────
+crypto ipsec profile DMVPN_PROFILE
+ set transform-set TS_DMVPN
+ set ikev2-profile PROF_DMVPN
+
+! ─── PASO 7: Interfaz mGRE del Spoke ───────────────────
+interface Tunnel0
+ description DMVPN-Spoke2-Fase3
+ ip address 10.25.37.3 255.255.255.0
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source Ethernet0/0
+ tunnel mode gre multipoint
+ tunnel key 20250737
+ ip nhrp network-id 1
+ ip nhrp authentication dmvpnkey
+ ip nhrp nhs 10.25.37.1
+ ip nhrp map 10.25.37.1 192.168.1.10
+ ip nhrp map multicast 192.168.1.10
+ ip nhrp shortcut
+ ip ospf network broadcast
+ ip ospf priority 0
+ tunnel protection ipsec profile DMVPN_PROFILE
+ no shutdown
+
+! ─── PASO 8: OSPF ──────────────────────────────────────
+router ospf 1
+ network 20.25.37.128 0.0.0.63 area 0
+ network 10.25.37.0 0.0.0.255 area 0
