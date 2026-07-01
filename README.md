@@ -684,9 +684,9 @@ interface Tunnel0
 
 ## 8. Video Demostrativo
 
-🎥 **[Ver demostración en YouTube](#)**
+🎥 **[Ver demostración en YouTube](https://youtu.be/WLUa1-bSpPY)**
 
-**Duración:** máximo 8 minutos
+**Duración:** 7:20
 
 **Contenido del video:**
 
