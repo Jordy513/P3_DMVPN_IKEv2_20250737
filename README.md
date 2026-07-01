@@ -634,8 +634,6 @@ R2# show ip nhrp
 | 5 | [`05_ikev2_sa_ready.png`](screenshots/05_ikev2_sa_ready.png) | Salida de `show crypto ikev2 sa` en R1 mostrando dos SAs en estado `READY`. |
 | 6 | [`06_ospf_neighbors.png`](screenshots/06_ospf_neighbors.png) | Salida de `show ip ospf neighbor` en R1 mostrando los Spokes como `FULL/DROTHER`. |
 | 7 | [`07_ping_spoke_spoke.png`](screenshots/07_ping_spoke_spoke.png) | Ping exitoso desde R2 (`source 20.25.37.65`) hacia PC3 (`20.25.37.130`) con `repeat 10`. |
-| 8 | [`08_ruta_H_shortcut.png`](screenshots/08_ruta_H_shortcut.png) | Salida de `show ip route` en R2 mostrando la entrada `H  20.25.37.128/26 via 10.25.37.3` — prueba definitiva de DMVPN Fase 3. |
-| 9 | [`09_nhrp_dinamico.png`](screenshots/09_nhrp_dinamico.png) | Salida de `show ip nhrp` en R2 mostrando la entrada dinámica con `NBMA address: 192.168.1.30` post-ping. |
 
 ---
 
